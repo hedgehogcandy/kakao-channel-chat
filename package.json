@@ -1,0 +1,43 @@
+{
+  "name": "kakao-channel-chat",
+  "version": "0.1.0",
+  "description": "카카오 채널(비즈니스 채팅/관리자센터) 세션을 재사용하는 비공식 API·CLI·MCP 서버 — 로그인체크/무한토큰/방리스트/읽음구분/대화내역/전송/실시간 알람. Unofficial.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "kakao",
+    "kakao-channel",
+    "kakaotalk",
+    "mcp",
+    "model-context-protocol",
+    "chatbot",
+    "unofficial"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hedgehogcandy/kakao-channel-chat.git"
+  },
+  "homepage": "https://github.com/hedgehogcandy/kakao-channel-chat#readme",
+  "bugs": {
+    "url": "https://github.com/hedgehogcandy/kakao-channel-chat/issues"
+  },
+  "bin": {
+    "kbc": "bin/kbc.js",
+    "kakao-channel-mcp": "src/mcp-server.js"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node bin/kbc.js",
+    "daemon": "node bin/kbc.js daemon",
+    "mcp": "node src/mcp-server.js",
+    "smoke": "node bin/kbc.js whoami"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.40.0"
+  }
+}

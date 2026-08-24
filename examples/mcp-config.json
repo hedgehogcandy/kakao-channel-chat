@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "kakao-channel": {
+      "command": "node",
+      "args": ["/absolute/path/to/kakao-channel-chat/src/mcp-server.js"],
+      "env": {
+        "KBC_PROFILE_ID": "_XXXXX",
+        "KBC_CHROME_PROFILE": "Default",
+        "KBC_MCP_ALLOW_SEND": "0"
+      }
+    }
+  }
+}
