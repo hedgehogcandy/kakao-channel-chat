@@ -23,10 +23,36 @@ export async function runDaemon(client, {
   replyText = '안녕하세요! 확인 후 빠르게 답변드리겠습니다 🙌',
   status = 'progress',
   onMessage = null,
+  reauth = null,             // async () => {} : 세션 끊김 시 재로그인(예: Playwright 브라우저). 성공 시 세션 갱신.
 } = {}) {
   let stopped = false;
+  let reauthing = false;
   const timers = [];
   const clear = () => { for (const t of timers) clearTimeout(t); };
+
+  // 세션 살아있는지 확인하고, 끊겼으면 재인증(가능하면 자동, 아니면 안내 후 복구 대기).
+  async function ensureAlive() {
+    client.reloadCookies();
+    const r = await client.checkLogin();
+    if (r.loggedIn) return true;
+    log('ERROR', `⚠️ 세션 끊김 감지! (${r.error})`);
+    if (reauth && !reauthing) {
+      reauthing = true;
+      try {
+        log('INFO', '🔐 자동 재인증 시도 — 로그인 브라우저를 엽니다(2FA는 직접 처리).');
+        await reauth();                 // Playwright 대화형 로그인 → storageState 갱신
+        client.reloadCookies();
+        const r2 = await client.checkLogin();
+        if (r2.loggedIn) { log('INFO', `✅ 세션 복구됨 — ${r2.user.name}`); return true; }
+        log('WARN', '재인증 후에도 세션 확인 실패 — 다음 주기에 재시도.');
+      } catch (e) {
+        log('WARN', `재인증 실패: ${e.message} — 수동으로 'kbc login' 실행하면 자동 복구됩니다.`);
+      } finally { reauthing = false; }
+    } else if (!reauth) {
+      log('WARN', "수동 재로그인 필요: 'kbc login' 실행 → 데몬이 새 세션을 자동으로 주워 복구합니다.");
+    }
+    return false;
+  }
 
   // --- 0) 기동: 로그인 확인 + 첫 토큰 ---
   const lg = await client.checkLogin();
@@ -60,12 +86,10 @@ export async function runDaemon(client, {
 
   // --- 2) 세션 keepalive: 쿠키 재로딩 + /users/me 터치 ---
   const keepalive = setInterval(async () => {
-    if (stopped) return;
+    if (stopped || reauthing) return;
     try {
-      client.reloadCookies();               // Chrome 쿠키 강제 재로딩(최신 세션)
-      const r = await client.checkLogin();
-      if (r.loggedIn) log('DEBUG', `keepalive OK — ${r.user.name}`);
-      else log('ERROR', `⚠️ 세션 끊김 감지! Chrome 재로그인 필요. (${r.error}) — 계속 재시도`);
+      const alive = await ensureAlive();    // 쿠키 재로딩 + 끊김 시 재인증
+      if (alive) log('DEBUG', 'keepalive OK');
     } catch (e) { log('WARN', `keepalive 오류: ${e.message}`); }
   }, keepaliveMs);
   timers.push({ [Symbol.for('interval')]: keepalive });

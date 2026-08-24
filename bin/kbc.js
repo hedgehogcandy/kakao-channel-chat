@@ -200,15 +200,19 @@ async function main() {
       break;
     }
     case 'daemon': {
+      let reauth = null;
       if (USE_PLAYWRIGHT) {
-        // Playwright 모드: 브라우저 세션을 살려두는 keepAlive를 함께 구동(쿠키 안 풀리게).
-        const { keepAlive } = await import('../src/auth-playwright.js');
+        // Playwright 모드: 세션 유지 keepAlive + 끊김 시 자동 재로그인.
+        const { keepAlive, loginInteractive } = await import('../src/auth-playwright.js');
         await keepAlive({ statePath: PW_STATE, headless: !has('--headed'), onError: (e) => console.error('keepAlive:', e.message) });
         console.log('🌐 Playwright 세션 keepAlive 시작 — 세션을 주기적으로 갱신합니다.');
+        // 세션이 완전히 풀리면 로그인 브라우저를 다시 띄워 2FA만 처리하면 복구.
+        reauth = () => loginInteractive({ statePath: PW_STATE, headless: false });
       }
       await runDaemon(c, {
         autoReply: has('--autoreply') || process.env.KBC_AUTOREPLY === '1',
         replyText: process.env.KBC_REPLY || undefined,
+        reauth,
       });
       break;
     }

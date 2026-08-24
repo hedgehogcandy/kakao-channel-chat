@@ -35,6 +35,7 @@ node bin/kbc.js login          # 브라우저가 열림 → 카카오 로그인(
 KBC_AUTH=playwright node bin/kbc.js whoami   # 이후 저장된 세션 사용
 ```
 - 세션은 `.kbc-auth/state.json`(gitignore)에 저장. `daemon`이 주기적으로 사이트를 터치해 **세션을 안 풀리게** 유지.
+- **자동 재로그인**: 세션이 완전히 풀리면 데몬이 감지 → 로그인 브라우저를 다시 띄움(2FA만 직접 처리) → 자동 복구. 헤드리스/서버면 `kbc login`을 다시 실행하면 데몬이 새 세션을 자동으로 주워 재시작 없이 복구.
 
 **3) 쿠키 직접 주입**
 ```bash
