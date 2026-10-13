@@ -14,12 +14,20 @@ import { join } from 'node:path';
 import { copyFileSync, existsSync, readdirSync, rmSync, mkdtempSync } from 'node:fs';
 
 const SALT = 'saltysalt';
+
+// KBC_COOKIE_BROWSER=aside 면 Aside(Chromium) 저장소를 읽는다 — 저장 방식은 Chrome 과 같고 폴더·키체인 이름만 다르다.
+// 2026-10-13: Chrome 계열 실행 금지(오너 지시 09-28) 뒤 카카오 비즈 로그인은 Aside 에서 한다. 미지정이면 Chrome(이전 동작).
+const BROWSERS = {
+  chrome: { dir: ['Google', 'Chrome'], service: 'Chrome Safe Storage', account: 'Chrome' },
+  aside: { dir: ['Aside'], service: 'Aside Safe Storage', account: 'Aside' },
+};
+
 const IV = Buffer.alloc(16, ' ');
 
-function keychainPassword() {
+function keychainPassword(browser) {
   // Keychain 접근 시 최초 1회 macOS 권한 팝업이 뜰 수 있음(허용 필요).
   const out = execFileSync('/usr/bin/security', [
-    'find-generic-password', '-w', '-s', 'Chrome Safe Storage', '-a', 'Chrome',
+    'find-generic-password', '-w', '-s', browser.service, '-a', browser.account,
   ], { encoding: 'utf8' });
   return out.trim();
 }
@@ -49,21 +57,30 @@ function decryptValue(encrypted, key) {
   return dec.toString('utf8');
 }
 
-export function chromeProfilesDir() {
-  return join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome');
+export function chromeProfilesDir(browser = BROWSERS.chrome) {
+  return join(homedir(), 'Library', 'Application Support', ...browser.dir);
 }
 
 // kakao 쿠키가 들어있는 프로필을 자동 탐색해서 쿠키 목록 반환.
 // profileHint 로 특정 프로필("Default","Profile 1"...) 지정 가능.
 export function loadKakaoCookies({ profileHint = null } = {}) {
-  const base = chromeProfilesDir();
-  if (!existsSync(base)) throw new Error(`Chrome 프로필 폴더 없음: ${base}`);
+  const forced = BROWSERS[process.env.KBC_COOKIE_BROWSER];
+  if (forced) return pickProfile(forced, forced === BROWSERS.chrome ? profileHint : null);
+  // Aside 에 카카오 완전 로그인(_kawlt)된 프로필이 있으면 그걸 먼저 쓴다 — Chrome 프로필엔 서버에서 이미 만료된
+  // 옛 쿠키가 남아 점수만 높게 나온다(2026-10-13 실측). 프로필 힌트("Profile 24")는 Chrome 용이라 Aside 에선 무시.
+  try { const aside = pickProfile(BROWSERS.aside, null); if (aside.score >= 2) return aside; } catch { /* Aside 없음 → Chrome */ }
+  return pickProfile(BROWSERS.chrome, profileHint);
+}
+
+function pickProfile(browser, profileHint) {
+  const base = chromeProfilesDir(browser);
+  if (!existsSync(base)) throw new Error(`브라우저 프로필 폴더 없음: ${base}`);
 
   let profiles;
   if (profileHint) profiles = [profileHint];
   else {
     profiles = readdirSync(base).filter((d) => {
-      if (d !== 'Default' && !d.startsWith('Profile ')) return false;
+      if (d !== 'Default' && !d.startsWith('Profile ') && !d.startsWith('AsideSync-')) return false;
       return existsSync(join(base, d, 'Cookies'));
     });
     if (!profiles.includes('Default') && existsSync(join(base, 'Default', 'Cookies'))) {
@@ -71,7 +88,7 @@ export function loadKakaoCookies({ profileHint = null } = {}) {
     }
   }
 
-  const key = deriveKey(keychainPassword());
+  const key = deriveKey(keychainPassword(browser));
   const tmpDir = mkdtempSync(join(tmpdir(), 'kbc-')); // 사용자 전용 0700 임시 디렉터리
   const tmp = join(tmpDir, 'Cookies.sqlite');
   const SQL =
@@ -97,7 +114,7 @@ export function loadKakaoCookies({ profileHint = null } = {}) {
       if (names.has('_kawlt') && names.has('_kawltea')) score = 3;
       else if (names.has('_kawlt')) score = 2;
       else if (names.has('_kadu') || names.has('_kau')) score = 1;
-      const entry = { profile: prof, cookies, score };
+      const entry = { profile: prof, browser: browser.service.split(' ')[0], cookies, score };
       if (profileHint) { best = entry; break; }             // 지정 프로필이면 그대로
       if (!best || score > best.score) best = entry;
       if (score >= 3) break;                                 // 완전 로그인 찾으면 종료
