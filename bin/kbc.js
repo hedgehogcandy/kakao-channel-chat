@@ -9,6 +9,8 @@ try { process.loadEnvFile(); } catch { /* .env 없으면 무시 */ }
 
 const PW_STATE = process.env.KBC_PW_STATE || '.kbc-auth/state.json';
 const USE_PLAYWRIGHT = process.env.KBC_AUTH === 'playwright';
+// state: 다른 기계가 내보낸 storageState 파일의 쿠키만 쓴다(브라우저를 띄우지 않음, 파일이 바뀌면 다시 읽음).
+const USE_STATE_FILE = USE_PLAYWRIGHT || process.env.KBC_AUTH === 'state';
 
 const PROFILE_ID = process.env.KBC_PROFILE_ID;
 function requireProfile() {
@@ -27,7 +29,7 @@ const has = (f) => flags.has(f);
 async function makeClient() {
   // 인증 소스 우선순위: KBC_AUTH=playwright > KBC_COOKIE(고정) > Chrome 자동추출(macOS)
   let cookieProvider = null;
-  if (USE_PLAYWRIGHT) {
+  if (USE_STATE_FILE) {
     const { makeStateProvider } = await import('../src/auth-playwright.js');
     cookieProvider = makeStateProvider(PW_STATE);
   }
@@ -61,8 +63,8 @@ const HELP = `kbc — 카카오 채널(비즈니스 채팅) CLI
 
 설정(.env 또는 환경변수):
   KBC_PROFILE_ID    채널 프로필ID (business.kakao.com/{이값}/chats)  [필수]
-  KBC_AUTH          인증 방식: playwright (지정 시 저장된 세션 사용, 크로스플랫폼)
-  KBC_PW_STATE      Playwright 세션 파일 경로 (기본 .kbc-auth/state.json)
+  KBC_AUTH          인증 방식: playwright (저장된 세션 + 브라우저 keepAlive) | state (세션 파일만, 브라우저 없음)
+  KBC_PW_STATE      세션(storageState) 파일 경로 (기본 .kbc-auth/state.json)
   KBC_CHROME_PROFILE  Chrome 프로필명(Default, "Profile 1"...)   [선택, macOS 자동추출]
   KBC_COOKIE        고정 Cookie 헤더(미지정 시 Chrome 쿠키 자동추출)
   KBC_REPLY         autoreply/daemon 기본 답장 템플릿
